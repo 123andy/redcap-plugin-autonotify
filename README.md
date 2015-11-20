@@ -18,7 +18,10 @@ If things do not work out at first, FIND YOUR PHP ERROR LOG!  This is the key to
 
 ## Configure ##
 To configure this for your project add a bookmark to the autonotify plugin:
-```/plugins/autonotify/```
+```
+/plugins/autonotify/
+```
+
 Be sure to check the box to append the current project_id information.
 
 Then click on the new plugin link on the left sidebar.  From here you should be able to create a new autonotify configuration.
