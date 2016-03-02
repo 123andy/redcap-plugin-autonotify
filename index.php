@@ -206,7 +206,6 @@ print AutoNotify::renderHelpDivs();
 
 <script type="text/javascript">
 
-	// Take all input elements inside our autonotify_config div and post them to this page
 	function save() {
 		var params = new Object;	// Info to save
 		// Loop through each trigger
@@ -215,11 +214,13 @@ print AutoNotify::renderHelpDivs();
 		$('div.trigger', '#triggers_config').each (function (index1, value1) {
 			i++;
 			triggers[i] = new Object;
+
+			// Loop through each input inside the trigger
 			$('*:input', $(this)).each (function (index2, value2) {
 				// Skip buttons or other attributes that don't have an ID
 				if ($(this).attr('id')) {
 					// Replace any -x suffix in the stored array (e.g. logic-1 becomes logic)
-					triggers[i][$(this).attr('id').replace(/\-\d/,'')] = $(this).val();
+					triggers[i][$(this).attr('id').replace(/\-\d+/,'')] = $(this).val();
 				}
 			});
 			triggers[i]['enabled'] = $('input[name^=enabled]:checked', $(this)).val();
@@ -236,11 +237,7 @@ print AutoNotify::renderHelpDivs();
 			if ($(this).attr('id')) params[$(this).attr('id')] = $(this).val();
 		});
 		params['save'] = 1;
-//		params['ccid'] = $('#ccid').val();
-//		console.log('Params:', params);
-//		if (confirm('Press OK to SAVE')) {
-			post('', params);
-//		}
+		post('', params);
 	}
 
 	function refresh() {
