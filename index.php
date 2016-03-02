@@ -37,10 +37,10 @@ require_once "common.php";
 
 // Create an AutoNotify Object
 $an = new AutoNotify($project_id);
-error_log("Here");
+//error_log("Here");
 
 logIt("Starting AutoNotify on project $project_id");
-logIt("DET URL: " . $an->getDetUrl(), "DEBUG");
+//logIt("DET URL: " . $an->getDetUrl(), "DEBUG");
 
 
 ##### RUNNING AS DET - PART 2 #####
