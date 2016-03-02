@@ -26,7 +26,7 @@ error_log("Here24");
 $action = '';	// Script action
 
 ##### RUNNING AS DET - PART 1 #####
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+if ( $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['project_id']) ) {
 	$action = 'det';
 	define('NOAUTH',true);	// Turn off Authentication - running on server
 	$_GET['pid'] = $_POST['project_id'];	// Set the pid from POST so context is Project rather than Global
@@ -125,8 +125,8 @@ if ( $an->loadConfig() ) {
 };
 
 # Load an existing template from the DET if present in the query string
-if ($other_det_url = $an->isDifferentDetUrl()) {
-	global $data_entry_trigger_url;
+global $data_entry_trigger_url;
+if ( !empty($data_entry_trigger_url) && $an->isDetUrlNotAutoNotify() ) {
 	$msg = "It appears you may have an existing DET url: <b>$data_entry_trigger_url</b><br/></br>Autonotify needs to use your DET url to function and upon saving will set it to <b>" . $an->getDetUrl() . "</b><br/><br/>
 		";
 	if ( isset($an->config['pre_script_det_url']) && !empty ($an->config['pre_script_det_url']) ) {

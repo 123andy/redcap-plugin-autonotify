@@ -69,7 +69,7 @@ class AutoNotify {
 			REDCap::logEvent(AutoNotify::PluginName . " Update", "Moved querystring config to log table", json_encode($log_data));
 
 			// Step 3:  Update the DET URL to be plain-jane
-			self::isDifferentDetUrl(true);
+			self::isDetUrlNotAutoNotify(true);
 		}
 	}
 
@@ -81,7 +81,7 @@ class AutoNotify {
 		$this->checkForUpgrade();
 
 		// Load from the log
-		$sql = "SELECT l.data_values, l.ts
+		$sql = "SELECT l.sql_log, l.ts
 			FROM redcap_log_event l WHERE
 		 		l.project_id = " . intval($this->project_id) . "
 			AND l.page = 'PLUGIN'
@@ -92,7 +92,7 @@ class AutoNotify {
 		if (db_num_rows($q) == 1) {
 			// Found config!
 			$row = db_fetch_assoc($q);
-			$this->config = json_decode($row['data_values'], true);
+			$this->config = json_decode($row['sql_log'], true);
 			if (isset($this->config['triggers'])) {
 				$this->triggers = json_decode(htmlspecialchars_decode($this->config['triggers'], ENT_QUOTES), true);
 			}
@@ -107,12 +107,12 @@ class AutoNotify {
 
 	// Write the current config to the log
 	public function saveConfig() {
-		$data_values = json_encode($this->config);
-		REDCap::logEvent(AutoNotify::PluginName . " Config", $data_values);
+		$sql_log = json_encode($this->config);
+		REDCap::logEvent(AutoNotify::PluginName . " Config", "Configuration Updated", $sql_log);
 		logIt(__FUNCTION__ . ": Saved configuration", "INFO");
 
 		// Update the DET url if needed
-		self::isDifferentDetUrl(true);
+		self::isDetUrlNotAutoNotify(true);
 	}
 
 	// Execute the loaded DET.  Returns false if any errors
@@ -223,7 +223,7 @@ class AutoNotify {
 	}
 
 	// If there is a different DET url configured in the project, it will return it, otherwise returns false
-	public function isDifferentDetUrl($update = false) {
+	public function isDetUrlNotAutoNotify($update = false) {
 		global $data_entry_trigger_url;
 		$det_url = self::getDetUrl();
 		if ($data_entry_trigger_url !== $det_url) {
@@ -407,14 +407,14 @@ class AutoNotify {
 		}
 
 		// Add Log Entry
-		$data_values = "title,$title\nrecord,{$this->record}\nevent,{$this->redcap_event_name}";
+		$data_values = "AutoNotify Rule Fired\n=============\ntitle,$title\nrecord,{$this->record}\nevent,{$this->redcap_event_name}";
 		REDCap::logEvent('AutoNotify Alert',$data_values,"",$this->record, $this->event_id);
 		return true;
 	}
 	
 	// Go through logs to see if there is a prior alert for this record/event/title
 	public function checkForPriorNotification($title) {
-		$sql = "SELECT l.data_values, l.ts 
+		$sql = "SELECT l.data_values, l.ts
 			FROM redcap_log_event l WHERE 
 		 		l.project_id = {$this->project_id}
 			AND l.page = 'PLUGIN' 
