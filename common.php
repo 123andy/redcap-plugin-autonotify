@@ -1,28 +1,38 @@
 <?php
 
 /**
-
-	Autonotify plugin by Andy Martin, Stanford University
-
-**/
+ * Autonotify plugin by Andy Martin, Stanford University
+ *
+ * Substantially revised on 2016-03-01 to support saving to the log and additoinal features
+ */
 
 error_reporting(E_ALL);
 
 class AutoNotify {
-	
-	// Message Parameters
-	public $to, $from, $subject, $message, $post_det_url;
 
-	public $config, $config_encoded;	// This is an array of parameters for the autoNotification object
-	public $triggers;
-	
+	const PluginName = "AutoNotify v2";
+
+	// Message Parameters
+	public $to, $from, $subject, $message;
+
+	// Other properties
+	public $config, $triggers, $pre_det_url, $post_det_url;
+
 	// DET Project Parameters
 	public $project_id, $instrument, $record, $redcap_event_name, $event_id, $redcap_data_access_group, $instrument_complete;
 
-	// Create an AutoNotify Object based from a DET call
-	// Requires that the project context be set.  It loads the config from the an parameter in the query string
-	public function loadFromDet() {
-		// Get parameters from REDCap DET Post
+	// Instantiate the object with the project_id
+	public function __construct($project_id) {
+		if ($project_id) {
+			$this->project_id = intval($project_id);
+		} else {
+			logIt("Called outside of context of project", "ERROR");
+			exit();
+		}
+	}
+
+	// Adds information from the DET post into the current object
+	public function loadDetPost() {
 		$this->project_id = voefr('project_id');
 		$this->instrument = voefr('instrument');
 		$this->record = voefr('record');
@@ -32,36 +42,97 @@ class AutoNotify {
 			$this->event_id = array_search($this->redcap_event_name, $events);
 		}
 		$this->redcap_data_access_group = voefr('redcap_data_access_group');
-		$this->instrument_complete = voefr($instrument.'_complete');
-		self::loadEncodedConfig(voefr('an'));
-//error_log('Loaded from DET: '.print_r($this,true));
+		$this->instrument_complete = voefr($this->instrument.'_complete');
 	}
 
-	// Loads the config object from the encoded query string variable AN
-	public function loadEncodedConfig($an) {
-		$this->config_encoded = $an;
-		$this->config = self::decrypt($this->config_encoded);
-		if (isset($this->config['triggers'])) {
-			$this->triggers = json_decode(htmlspecialchars_decode($this->config['triggers'], ENT_QUOTES), true);
+	// Converts old autonotify configs that used the url into new ones that use the log table
+	public function checkForUpgrade() {
+		// To be back-compatible, we need to be able to convert old autonotify calls into the newer format.
+
+		global $data_entry_trigger_url;
+		$det_qs = parse_url($data_entry_trigger_url, PHP_URL_QUERY);
+		parse_str($det_qs,$params);
+		if (isset($params['an'])) {
+			// Step 1:  We have identified an old DET-based config
+			logIt("Updating older DET url: $data_entry_trigger_url", "DEBUG");
+			$an = $params['an'];
+			$old_config = self::decrypt($an);
+
+			// Step 2:  Save the updated autonotify object
+			$this->config = $old_config;
+			$this->saveConfig();
+			$log_data = array(
+				'action' => 'AutoNotify config moved from querystring to log',
+				'an' => $an,
+				'config' => $old_config
+			);
+			REDCap::logEvent(AutoNotify::PluginName . " Update", "Moved querystring config to log table", json_encode($log_data));
+
+			// Step 3:  Update the DET URL to be plain-jane
+			self::isDifferentDetUrl(true);
 		}
-//		error_log(print_r($this,true));
-//		error_log(print_r($this->config_encoded,true));
-//		error_log(print_r(self::decrypt($this->config_encoded),true));
 	}
-	
+
+	// Scans the log for the latest autonotify configuration
+	public function loadConfig() {
+//		logIt(__FUNCTION__, "DEBUG");
+
+		// Convert old querystring-based autonotify configurations to the log-based storage method
+		$this->checkForUpgrade();
+
+		// Load from the log
+		$sql = "SELECT l.data_values, l.ts
+			FROM redcap_log_event l WHERE
+		 		l.project_id = " . intval($this->project_id) . "
+			AND l.page = 'PLUGIN'
+			AND l.description = '" . AutoNotify::PluginName . " Config'
+			ORDER BY ts DESC LIMIT 1";
+		$q = db_query($sql);
+//		logIt(__FUNCTION__ . ": sql: $sql","DEBUG");
+		if (db_num_rows($q) == 1) {
+			// Found config!
+			$row = db_fetch_assoc($q);
+			$this->config = json_decode($row['data_values'], true);
+			if (isset($this->config['triggers'])) {
+				$this->triggers = json_decode(htmlspecialchars_decode($this->config['triggers'], ENT_QUOTES), true);
+			}
+			logIt(__FUNCTION__ . ": Found version with ts ". $row['ts'],"INFO");
+			return true;
+		} else {
+			// No previous config was found in the logs
+			logIt(__FUNCTION__ . ": No config saved in logs for this project", "INFO");
+			return false;
+		}
+	}
+
+	// Write the current config to the log
+	public function saveConfig() {
+		$data_values = json_encode($this->config);
+		REDCap::logEvent(AutoNotify::PluginName . " Config", $data_values);
+		logIt(__FUNCTION__ . ": Saved configuration", "INFO");
+
+		// Update the DET url if needed
+		self::isDifferentDetUrl(true);
+	}
+
 	// Execute the loaded DET.  Returns false if any errors
 	public function execute() {
+//		logIt(__FUNCTION__, "DEBUG");
+
 		// Check for Pre-DET url
 		self::checkPreDet();
 
+		// Decode the triggers from the config
+		$triggers = json_decode(htmlspecialchars_decode($this->config['triggers'], ENT_QUOTES), true);
+
 		// Loop through each notification
-		foreach ($this->triggers as $i => $trigger) {
+		foreach ($triggers as $i => $trigger) {
 			$logic = $trigger['logic'];
 			$title = $trigger['title'];
 			$enabled = $trigger['enabled'];
 			
 			if (!$enabled) {
-				logIt("The current trigger ($title) is not set as enabled - skipping");
+//				logIt(__FUNCTION__ . ": The current trigger ($title) is not set as enabled - skipping", "DEBUG");
 				continue;
 			}
 			
@@ -72,14 +143,15 @@ class AutoNotify {
 				if (LogicTester::evaluateLogicSingleRecord($logic, $this->record)) {
 					// Condition is true, check to see if already notified
 					if (!self::checkForPriorNotification($title)) {
-						self::notify($title);
-						logIt("{$this->record}: Notified ($title)");
+						$result = self::notify($title);
+						logIt("{$this->record}: Notified ($title) / " . ($result ? 'Success' : 'Failure') );
 					} else {
 						// Already notified
 						logIt("{$this->record}: Already notified ($title)");
 					}
 				} else {
 					// Logic did not pass
+					logIt("Logic: $logic / Record: " . $this->record . " / Project: " . $this->project_id, "DEBUG");
 					logIt("{$this->record}: Logic test failed ($title)");
 				}
 			} else {
@@ -90,26 +162,21 @@ class AutoNotify {
 		
 		// Check for Post-DET url
 		self::checkPostDet();
-		
 	}
 
 
 	// Used to test the logic and return an appropriate image
 	public function testLogic($logic) {
 		
-		logIt('Testing record '. $this->record . ' with ' . $logic);
-		
+//		logIt('Testing record '. $this->record . ' with ' . $logic, "DEBUG");
 		if (LogicTester::isValid($logic)) {
 			
 			// Append current event details
 			if (REDCap::isLongitudinal() && $this->redcap_event_name) {
 				$logic = LogicTester::logicPrependEventName($logic, $this->redcap_event_name);
-				logIt('Logic updated with selected event: '. $logic);
+				logIt(__FUNCTION__ . ": logic updated with selected event as " . $logic, "INFO");
 			}	
-			// Test logic
-			//logIt('Logic:' . $logic, 'DEBUG');
-			//logIt('This:' . print_r($this,true), 'DEBUG');
-			
+
 			if (LogicTester::evaluateLogicSingleRecord($logic, $this->record)) {
 				$result = RCView::img(array('class'=>'imgfix', 'src'=>'accept.png'))." True";
 			} else {
@@ -131,7 +198,6 @@ class AutoNotify {
 	// Check if there is a post-trigger DET configured - if so, post to it.
 	public function checkPostDet() {
 		if ($this->config['post_script_det_url']) {
-         logIt('DET URL: ' . $this->config['post_script_det_url'], "DEBUG");
 			self::callDets($this->config['post_script_det_url']);
 		}
 	}
@@ -142,6 +208,35 @@ class AutoNotify {
 		foreach ($dets as $det_url) {
 			$det_url = trim($det_url);
 			http_post($det_url, $_POST, 10);				
+		}
+	}
+
+	// Now that we're not storing the DET in the query string - this simply needs to be the url to this plugin
+	public function getDetUrl() {
+		// Build the url of the page that called us
+		$url = 'http' . (isset($_SERVER['HTTPS']) ? 's' : '') . '://' . "{$_SERVER['HTTP_HOST']}{$_SERVER['REQUEST_URI']}";
+		// At Stanford, we use http inside of the load balancer
+		if (strpos($base, 'stanford.edu') !== false) $base = str_replace('https','http',$base);
+		// Remove query string from DET url
+		$url = preg_replace('/\?.*/', '', $url);
+		return $url;
+	}
+
+	// If there is a different DET url configured in the project, it will return it, otherwise returns false
+	public function isDifferentDetUrl($update = false) {
+		global $data_entry_trigger_url;
+		$det_url = self::getDetUrl();
+		if ($data_entry_trigger_url !== $det_url) {
+			if ($update) {
+				// Force the update
+				$sql = "update redcap_projects set data_entry_trigger_url = '".prep($det_url)."' where project_id = " . intval($this->project_id) . " LIMIT 1;";
+				db_query($sql);
+				REDCap::logEvent(AutoNotify::PluginName . " Update", "Converted DET Url to $det_url (see log table for old value)", $data_entry_trigger_url);
+				$data_entry_trigger_url = $det_url;
+			}
+			return $det_url;
+		} else {
+			return false;
 		}
 	}
 
@@ -302,13 +397,19 @@ class AutoNotify {
 		// Send Email
 		if (!$email->send()) {
 			error_log('Error sending mail: '.$email->getSendError().' with '.json_encode($email));
-			exit;
+			REDCap::logEvent(
+				AutoNotify::PluginName . " Error", "Error sending AutoNotify Email: " . $title,
+				$email->getSendError() . " with " . json_encode($email),
+				$this->record,
+				$this->event_id
+			);
+			return false;
 		}
-//		error_log ('Email sent');
-		
+
 		// Add Log Entry
 		$data_values = "title,$title\nrecord,{$this->record}\nevent,{$this->redcap_event_name}";
-		REDCap::logEvent('AutoNotify Alert',$data_values);
+		REDCap::logEvent('AutoNotify Alert',$data_values,"",$this->record, $this->event_id);
+		return true;
 	}
 	
 	// Go through logs to see if there is a prior alert for this record/event/title
@@ -350,7 +451,7 @@ class AutoNotify {
 		$encoded = encrypt($json);
 		return rawurlencode($encoded);
 	}
-	
+
 	// Renders the triggers portion of the page, or an empty trigger if new
 	public function renderTriggers() {
 		$html = "<div id='triggers_config'>";
@@ -389,7 +490,7 @@ class AutoNotify {
 			RCView::td(array('class'=>'td1'), self::insertHelp($help_id)).
 			RCView::td(array('class'=>'td2'), "<label for='$id'><b>$label:</b></label>").
 			RCView::td(array('class'=>'td3'),
-		 		RCView::input(array('class'=>'tbi x-form-text x-form-field','id'=>$id,'name'=>$name,'value'=>$value))
+		 		RCView::input(array('class'=>'tbi x-form-text x-form-field','id'=>$id, 'value'=>$value))
 			)
 		);
 		return $row;
@@ -461,22 +562,6 @@ class AutoNotify {
 	
 	public function insertHelp($e) {
 		return "<span><a href='javascript:;' id='".$e."_info_trigger' info='".$e."_info' class='info' title='Click for help'><img class='imgfix' style='height: 16px; width: 16px;' src='".APP_PATH_IMAGES."help.png'></a></span>";
-	}
-
-	public function updateDetUrl($an) {
-		global $data_entry_trigger_url, $redcap_base_url;
-		$base = $redcap_base_url;
-		// At stanford, we use http inside of the load balancer
-		if (strpos($base, 'stanford.edu') !== false) $base = str_replace('https','http',$base);
-		$parse_url = parse_url($_SERVER['PHP_SELF']);
-		$path = dirname($parse_url['path']);
-		// Clean up double-slashes
-		$data_entry_trigger_url = preg_replace('/(?:(?<!http:|https:))(\/\/)/','/', $base . $path);
-		// Add an variable
-		$data_entry_trigger_url .= '/?an=' . $an;
-		$sql = "update redcap_projects set data_entry_trigger_url = '".prep($data_entry_trigger_url)."' where project_id = " . PROJECT_ID . " LIMIT 1;";
-		$q = db_query($sql);
-//		echo "$sql";
 	}
 
 	public function renderHelpDivs() {

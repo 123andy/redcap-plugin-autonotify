@@ -1,27 +1,32 @@
 <?php
 
-/**
-	
-	This plugin is designed to help create automatic email notifications when sensitive
-	responses are received from a survey.
-	
-	It must be used in conjunction with a data entry trigger to function in real-time.
-	The settings for each project are stored as an encoded variable (an) in the query string of the DET.
-
+/*
+ *
+ * This plugin is designed to help create automatic email notifications when sensitive
+ * responses are received from a survey.
+ *
+ * As of 2016-03-01 Autonotify was modified to store the configuration in the log instead of using the DET query string.
+ * This was done to alleviate issues around maximum query string length.  The new version offers the ability to upgrade existing
+ * autonitfy configurations on first use.
+ *
+ * It must be used in conjunction with a data entry trigger to function in real-time.
+ * The settings for each project are stored as an encoded variable (an) in the query string of the DET.
+ *
+ * Andrew Martin, Stanford University, 2016
+ *
 **/
 
 // File path and prefix for log file - make sure web user has write permissions
-//$log_prefix = "/Users/andy123/Documents/local REDCap server/redcap/temp/autonotify";
-$log_prefix = "/var/log/redcap/autonotify";
-
-
+$log_prefix = "/Users/andy123/Documents/local REDCap server/redcap/temp/autonotify";
+//$log_prefix = "/var/log/redcap/autonotify";
 
 error_reporting(E_ALL);
+error_log("Here24");
 
 $action = '';	// Script action
 
 ##### RUNNING AS DET - PART 1 #####
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_GET['an'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 	$action = 'det';
 	define('NOAUTH',true);	// Turn off Authentication - running on server
 	$_GET['pid'] = $_POST['project_id'];	// Set the pid from POST so context is Project rather than Global
@@ -32,12 +37,18 @@ require_once "../../redcap_connect.php";
 require_once "common.php";
 
 // Create an AutoNotify Object
-$an = new AutoNotify();
+$an = new AutoNotify($project_id);
+error_log("Here");
+
+logIt("Starting AutoNotify on project $project_id");
+logIt("DET URL: " . $an->getDetUrl(), "DEBUG");
+
 
 ##### RUNNING AS DET - PART 2 #####
 if ($action == 'det') {
 	// Execute AutoNotify script if called from DET trigger
-	$an->loadFromDet();
+	$an->loadDetPost();
+	$an->loadConfig();
 	$an->execute();
 	exit;
 }
@@ -77,7 +88,7 @@ if (isset($_POST['test']) && $_POST['test']) {
 #### ADD TRIGGER ####
 # Called by Ajax
 if (isset($_POST['addTrigger'])) {
-	$index = $_POST['addTrigger'] + 1;
+	$index = intval($_POST['addTrigger']) + 1;
 	echo AutoNotify::renderTrigger($index);
 	exit;
 }
@@ -94,35 +105,44 @@ injectPluginTabs($pid, $_SERVER["REQUEST_URI"], 'AutoNotify');
 
 # Check to see if we are saving a previously posted trigger
 if (isset($_POST['save']) && $_POST['save']) {
-	// Save Trigger
-	//	echo ("POST: <pre>".print_r($_POST,true));
+//	logIt(__FUNCTION__ . ": POST: ".print_r($_POST,true), "DEBUG");
+
+	// Build Parameters
 	$params = $_POST;
 	unset($params['save']);
-	$params['last_saved'] = date('y-m-d h:i:s');
+	$params['last_saved'] = date('Y-m-d h:i:s');
 	$params['modified_by'] = USERID;
-	$encoded = $an->encode($params);
-	$an->updateDetUrl($encoded);
+	$an->config = $params;
+	$an->saveConfig();
 	renderTemporaryMessage('The automatic notification has been updated', 'Automatic Notification Saved');
 }
 
-# Load an existing template from the DET if present in the query string
-if (!empty($data_entry_trigger_url)) {
-	$query = parse_url($data_entry_trigger_url, PHP_URL_QUERY);
-	if ($query) parse_str($query,$params);
-	$config_encoded = isset($params['an']) ? $params['an'] : '';
+# Load the Configuration if present
+if ( $an->loadConfig() ) {
+//	renderTemporaryMessage("Existing Auto Notify configuration loaded");
+} else {
+	renderTemporaryMessage("To create an Auto Notify configuration, complete the form below and save", "New " . AutoNotify::PluginName . " Configuration");
+};
 
-	if ($config_encoded) {
-		$an->loadEncodedConfig($config_encoded);
+# Load an existing template from the DET if present in the query string
+if ($other_det_url = $an->isDifferentDetUrl()) {
+	global $data_entry_trigger_url;
+	$msg = "It appears you may have an existing DET url: <b>$data_entry_trigger_url</b><br/></br>Autonotify needs to use your DET url to function and upon saving will set it to <b>" . $an->getDetUrl() . "</b><br/><br/>
+		";
+	if ( isset($an->config['pre_script_det_url']) && !empty ($an->config['pre_script_det_url']) ) {
+		// We have a different DET url AND we already have a pre-script_det_url...
+		$msg .= "Since you already have a Pre-AutoNotify DET URL configured, your existing DET will be lost unless you copy it to one of the DET url locations below.";
 	} else {
-		$html = RCView::div(array('id'=>$id,'class'=>'red','style'=>'margin-top:20px;padding:10px 10px 15px;'),
-				RCView::div(array('style'=>'text-align:center;font-size:20px;font-weight:bold;padding-bottom:5px;'), "Warning: Existing DET Defined").
-				RCView::div(array(), "A data entry trigger was already defined for this project: <b>$data_entry_trigger_url</b><br>If you save this AutoNotification configuration you will replace this DET.  Your old DET has been moved to the pre-notification area and will be executed before this script unless otherwise changed.")
-		);
-		echo $html;
+		$msg .= "To preserve your existing DET url, it has been placed in the Pre-AutoNotification input at the bottom of this form and will be run before AutoNotify unless otherwise configured.  Remove it if you do not need it.";
 		$an->config['pre_script_det_url'] = $data_entry_trigger_url;
 	}
-}
 
+	$html = RCView::div(array('id'=>$id,'class'=>'red','style'=>'margin-top:20px;padding:10px 10px 15px;'),
+			RCView::div(array('style'=>'text-align:center;font-size:20px;font-weight:bold;padding-bottom:5px;'), "Warning: Existing DET Defined").
+			RCView::div(array(), $msg)
+	);
+	echo $html;
+}
 
 ######## HTML PAGE ###########
 ?>
@@ -134,6 +154,7 @@ if (!empty($data_entry_trigger_url)) {
 	table.tbi input {width: 500px; display: inline; height:20px}
 	table.tbi input[type='radio'] {width: 14px; display: normal;}
 	table.tbi textarea {width: 500px; display:inline; height:50px;}
+	.modified {	font-style: italic; color: #9a9faa }
 </style>
 
 <?php
@@ -166,8 +187,11 @@ RCView::div(array('class'=>'round chklist','id'=>'det_config'),
 	
 );
 
+$last_modified = "<div class='modified'>" . ( empty($an->config['last_saved']) ? "This configuration has not been saved" : "Last saved " . $an->config['last_saved'] . " by " . $an->config['modified_by'] ) . "</div>";
+
 $page = RCView::div(array('class'=>'autonotify_config'),
 	RCView::h3(array(),'AutoNotify: a DET-based Notification Plugin').
+	$last_modified.
 	$section.
 	RCView::div(array(),
 		RCView::button(array('class'=>'jqbuttonmed ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only','onclick'=>'javascript:save();'), RCView::img(array('src'=>'bullet_disk.png', 'class'=>'imgfix')).'<b>Save Configuration</b>').
@@ -178,7 +202,6 @@ $page = RCView::div(array('class'=>'autonotify_config'),
 
 print $page;
 print AutoNotify::renderHelpDivs();
-
 
 ?>
 
@@ -214,10 +237,11 @@ print AutoNotify::renderHelpDivs();
 			if ($(this).attr('id')) params[$(this).attr('id')] = $(this).val();
 		});
 		params['save'] = 1;
-		//if (confirm('Press OK to SAVE')) {
-		//	console.log(params);
+//		params['ccid'] = $('#ccid').val();
+//		console.log('Params:', params);
+//		if (confirm('Press OK to SAVE')) {
 			post('', params);
-		//}
+//		}
 	}
 
 	function refresh() {
