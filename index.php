@@ -21,12 +21,11 @@ $log_prefix = "/Users/andy123/Documents/local REDCap server/redcap/temp/autonoti
 //$log_prefix = "/var/log/redcap/autonotify";
 
 error_reporting(E_ALL);
-error_log("Here24");
 
 $action = '';	// Script action
 
 ##### RUNNING AS DET - PART 1 #####
-if ( $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['project_id']) ) {
+if ( $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['redcap_url']) ) {
 	$action = 'det';
 	define('NOAUTH',true);	// Turn off Authentication - running on server
 	$_GET['pid'] = $_POST['project_id'];	// Set the pid from POST so context is Project rather than Global
