@@ -135,7 +135,12 @@ class AutoNotify {
 //				logIt(__FUNCTION__ . ": The current trigger ($title) is not set as enabled - skipping", "DEBUG");
 				continue;
 			}
-			
+
+			if (empty($title)) {
+				logIt("Cannot process an alert with an empty title: " . json_encode($trigger),"ERROR");
+				continue;
+			}
+
 			// Append current event prefix to lonely fields if longitidunal
 			if (REDCap::isLongitudinal() && $this->redcap_event_name) $logic = LogicTester::logicPrependEventName($logic, $this->redcap_event_name);
 			
@@ -214,11 +219,20 @@ class AutoNotify {
 	// Now that we're not storing the DET in the query string - this simply needs to be the url to this plugin
 	public function getDetUrl() {
 		// Build the url of the page that called us
-		$url = 'http' . (isset($_SERVER['HTTPS']) ? 's' : '') . '://' . "{$_SERVER['HTTP_HOST']}{$_SERVER['REQUEST_URI']}";
-		// At Stanford, we use http inside of the load balancer
-		if (strpos($base, 'stanford.edu') !== false) $base = str_replace('https','http',$base);
+		$isHttps = isset($_SERVER['HTTPS']) AND !empty($_SERVER['HTTPS']) AND $_SERVER['HTTPS'] != 'off';
+
+		// Force http for certain domains
+		global $http_only;
+		foreach ($http_only as $site) {
+			if (strpos($_SERVER['HTTP_HOST'], $site) !== false) $isHttps = false;
+		}
+
+		// Build URL
+		$url = 'http' . ($isHttps ? 's' : '') . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+
 		// Remove query string from DET url
 		$url = preg_replace('/\?.*/', '', $url);
+
 		return $url;
 	}
 
@@ -407,7 +421,7 @@ class AutoNotify {
 		}
 
 		// Add Log Entry
-		$data_values = "AutoNotify Rule Fired\n=============\ntitle,$title\nrecord,{$this->record}\nevent,{$this->redcap_event_name}";
+		$data_values = "==> AutoNotify Rule Fired\ntitle,$title\nrecord,{$this->record}\nevent,{$this->redcap_event_name}";
 		REDCap::logEvent('AutoNotify Alert',$data_values,"",$this->record, $this->event_id);
 		return true;
 	}
@@ -430,7 +444,7 @@ class AutoNotify {
 				$time = substr($row['ts'], 8, 2) . ":" . substr($row['ts'], 10, 2);
 
 				// Already triggered
-//				error_log("Trigger previously matched on $date $time ". json_encode($row));
+				logIt("Trigger previously matched on $date $time / Row: ". json_encode($row) . " / Pairs: " . json_encode($pairs), "DEBUG");
 				return true;
 			}
 		}
@@ -655,8 +669,8 @@ function injectPluginTabs($pid, $plugin_path, $plugin_name) {
 }
 
 function logIt($msg, $level = "INFO") {
-	global $log_prefix;
-	file_put_contents( $log_prefix . "-" . date( 'Y-m' ) . ".log",	date( 'Y-m-d H:i:s' ) . "\t" . $level . "\t" . $msg . "\n", FILE_APPEND );
+	global $log_file;
+	if ( !empty($log_file) ) file_put_contents( $log_file,	date( 'Y-m-d H:i:s' ) . "\t" . $level . "\t" . $msg . "\n", FILE_APPEND );
 }
 
 // Function for decrypting (from version 643)
@@ -686,6 +700,54 @@ function decrypt_me($encrypted_data) {
 	print "ERROR DECODING";
 	return false;
 }
+
+function viewLog($file) {
+	// Render the page
+	$page = new HtmlPage();
+	$page->addExternalJS("https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.2/ace.js");
+	//$page->addExternalJS("https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.2/ext-searchbox.js");
+	//$page->addExternalJS("https://rawgithub.com/ajaxorg/ace-builds/master/src/ext-language_tools.js");
+	//$page->addExternalJs("https://code.jquery.com/jquery-2.0.3.min.js");
+	$page->addExternalJS(APP_PATH_JS . "base.js");
+	$page->addStylesheet("jquery-ui.min.css", 'screen,print');
+	//$page->addStylesheet("style.css", 'screen,print');
+	//$page->addStylesheet("home.css", 'screen,print');
+
+	$page->setPageTitle("Log View");
+	$page->PrintHeader();
+
+//	require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
+	print RCView::div(
+	array('class'=>'chklisthdr', 'style'=>'color:rgb(128,0,0);margin-top:10px;'),
+	"Custom Log File: " . $file
+	);
+
+	?>
+	<div id="editor" style="height: 500px; width: 100%; display:none;"><?php readfile_chunked($file); ?></div>
+	<div id="commandline" style="margin-top:10px;">This is the global <?php echo AutoNotify::PluginName ?> log.  Refresh for an update.</div>
+	<script>
+		$(document).ready(function(){
+			//var langTools = ace.require("ace/ext/language_tools");
+			var editor = ace.edit("editor");
+			editor.$blockScrolling = Infinity;
+			editor.resize(true);
+			editor.setReadOnly(true);
+			editor.setOptions({
+				autoScrollEditorIntoView: true,
+				showPrintMargin: false,
+				fontSize: "8pt"
+			});
+			$('#editor').css({'border':'1px solid'}).fadeIn('slow');
+			var row = editor.session.getLength() - 1
+			editor.gotoLine(row, 0);
+			editor.resize(true); // There is a bug in current version requiring this...
+			editor.scrollToLine(row);
+		});
+	</script>
+	<?php
+}
+
+
 
 
 ?>

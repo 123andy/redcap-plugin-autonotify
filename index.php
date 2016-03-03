@@ -15,15 +15,21 @@
  * Andrew Martin, Stanford University, 2016
  *
 **/
-
-// File path and prefix for log file - make sure web user has write permissions
-$log_prefix = "/Users/andy123/Documents/local REDCap server/redcap/temp/autonotify";
-//$log_prefix = "/var/log/redcap/autonotify";
-
 error_reporting(E_ALL);
 
-$action = '';	// Script action
 
+
+// MANUAL LOG FILE
+// $log_file = "/Users/andy123/Documents/local REDCap server/redcap/temp/autonotify.log";
+
+// MANUAL OVERRIDE OF HTTPS - Add your url domain to this array if you want to only use http
+$http_only = array('stanford.edu');
+
+
+
+////////////// DONT EDIT BELOW HERE //////////////
+
+$action = '';	// Script action
 ##### RUNNING AS DET - PART 1 #####
 if ( $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['redcap_url']) ) {
 	$action = 'det';
@@ -34,6 +40,11 @@ if ( $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['redcap_url']) ) {
 // Include required files
 require_once "../../redcap_connect.php";
 require_once "common.php";
+
+// If a log file hasn't been set, then let's default to the REDCap temp folder
+if (!isset('log_file')) {
+	$log_file = APP_PATH_TEMP . "autonotify_plugin.log";
+}
 
 // Create an AutoNotify Object
 $an = new AutoNotify($project_id);
@@ -93,6 +104,16 @@ if (isset($_POST['addTrigger'])) {
 }
 
 
+#### VIEW LOG ####
+# Called by Ajax
+if (isset($_POST['viewLog'])) {
+	global $project_id;
+	$project_id = $an->project_id;
+	viewLog($log_file);
+	exit;
+}
+
+
 ##### BEGIN NORMAL PAGE RENDERING #####
 # Display the project header
 require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
@@ -101,6 +122,30 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
 include APP_PATH_DOCROOT . "ProjectSetup/tabs.php";
 injectPluginTabs($pid, $_SERVER["REQUEST_URI"], 'AutoNotify');
 
+
+// Super user warnings
+if (defined('SUPER_USER') && SUPER_USER) {
+	if (!file_exists($log_file)) {
+		$msg = "The log file for this plugin <b>$log_file</b> does not appear to exist.  If this path is correct, try refreshing the page.<br>
+  				If this error recurs, then:<br>
+					- Make sure the directory is correct - you can change it by modifying the source code of this file: <b>" . __FILE__ . "</b><br>
+					- Make sure your webserver has permissions to write to <b>$log_file</b><br>
+					- If you do not want to log, you can set the variable to empty, e.g. (<code>\$log_file = ''</code>) to stop plugin logging.<br><br>
+					<i>This warning message is only displayed to SuperUsers</i>";
+		$html = RCView::div(array('id'=>$id,'class'=>'red','style'=>'margin-top:20px;padding:10px 10px 15px;'),
+			RCView::div(array('style'=>'text-align:center;font-size:20px;font-weight:bold;padding-bottom:5px;'), "Log File Warning").
+			RCView::div(array(), $msg)
+		);
+		print $html;
+	} else {
+		$msg = "As a super user, you can view the AutoNotify log to help troubleshoot: <button class='jqbutton ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only' name='viewLog'>View Log</button>";
+		$html = RCView::div(array('id'=>$id,'class'=>'green','style'=>'margin-top:20px;padding:10px 10px 15px;'),
+			RCView::div(array('style'=>'text-align:center;font-size:20px;font-weight:bold;padding-bottom:5px;'), "Super User View Log").
+			RCView::div(array(), $msg)
+		);
+		print $html;
+	}
+}
 
 # Check to see if we are saving a previously posted trigger
 if (isset($_POST['save']) && $_POST['save']) {
@@ -132,8 +177,9 @@ if ( !empty($data_entry_trigger_url) && $an->isDetUrlNotAutoNotify() ) {
 		// We have a different DET url AND we already have a pre-script_det_url...
 		$msg .= "Since you already have a Pre-AutoNotify DET URL configured, your existing DET will be lost unless you copy it to one of the DET url locations below.";
 	} else {
-		$msg .= "To preserve your existing DET url, it has been placed in the Pre-AutoNotification input at the bottom of this form and will be run before AutoNotify unless otherwise configured.  Remove it if you do not need it.";
-		$an->config['pre_script_det_url'] = $data_entry_trigger_url;
+		$msg .= "To preserve your existing DET url,  it must be copied to the Pre-AutoNotification DET Url input at the bottom of this form.<br>
+				<button class='jqbuttonmed ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only' name='copyDet' data-url='$data_entry_trigger_url'>Move existing DET to this AutoNotify config</button>";
+		//$an->config['pre_script_det_url'] = $data_entry_trigger_url;
 	}
 
 	$html = RCView::div(array('id'=>$id,'class'=>'red','style'=>'margin-top:20px;padding:10px 10px 15px;'),
@@ -320,6 +366,14 @@ print AutoNotify::renderHelpDivs();
 	// Add click event to all help buttons to show help
 	$(document).ready(function() {
 		updatePage();
+
+		$('button[name="copyDet"').bind('click',function() {
+			$('#pre_script_det_url').val($(this).data("url")).effect("highlight", {}, 1500);
+		});
+
+		$('button[name="viewLog"').bind('click',function() {
+			post('', {viewLog: 1, pid: pid});
+		});
 	});
 </script>
 
