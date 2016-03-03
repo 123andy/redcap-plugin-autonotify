@@ -42,7 +42,7 @@ require_once "../../redcap_connect.php";
 require_once "common.php";
 
 // If a log file hasn't been set, then let's default to the REDCap temp folder
-if (!isset('log_file')) {
+if (!isset($log_file)) {
 	$log_file = APP_PATH_TEMP . "autonotify_plugin.log";
 }
 
@@ -139,8 +139,8 @@ if (defined('SUPER_USER') && SUPER_USER) {
 		print $html;
 	} else {
 		$msg = "As a super user, you can view the AutoNotify log to help troubleshoot: <button class='jqbutton ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only' name='viewLog'>View Log</button>";
-		$html = RCView::div(array('id'=>$id,'class'=>'green','style'=>'margin-top:20px;padding:10px 10px 15px;'),
-			RCView::div(array('style'=>'text-align:center;font-size:20px;font-weight:bold;padding-bottom:5px;'), "Super User View Log").
+		$html = RCView::div(array('id'=>$id,'class'=>'yellow','style'=>'margin-top:20px;padding:10px 10px 15px;'),
+			RCView::div(array('style'=>'text-align:center;font-size:20px;font-weight:bold;padding-bottom:5px;')).
 			RCView::div(array(), $msg)
 		);
 		print $html;
