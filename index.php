@@ -224,7 +224,7 @@ RCView::div(array('class'=>'round chklist','id'=>'notification_config'),
 RCView::div(array('class'=>'round chklist','id'=>'det_config'),
 	// Pre and Post AutoNotification -DAG URL to be executed
 	RCView::div(array('class'=>'chklisthdr','style'=>'color:rgb(128,0,0);margin-top:10px;'), "Pre- and Post- AutoNotification DET Triggers").
-	RCView::p(array(), 'You can run additional Data Entry Triggers before or after this auto-notification test by inserting a comma-separated list of complete DET urls below.<br><i>Please note that these DET urls will be called each time this DET is called, whether the conditional logic evaluates to true or not.</i>').
+	RCView::p(array(), 'You can run additional Data Entry Triggers before or after this auto-notification test by inserting a pipe-delimited (e.g. | char) list of complete DET urls below.<br><i>Please note that these DET urls will be called each time this DET is called, whether the conditional logic evaluates to true or not.</i>').
 	RCView::table(array('cellspacing'=>'5', 'class'=>'tbi'),
 		AutoNotify::renderRow('pre_script_det_url','Pre-notification DET Url',$an->config['pre_script_det_url']).
 		AutoNotify::renderRow('post_script_det_url','Post-notification DET Url',$an->config['post_script_det_url'])

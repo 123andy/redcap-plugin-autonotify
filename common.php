@@ -209,7 +209,7 @@ class AutoNotify {
 
 	// Takes a comma-separated list of urls and calls them as DETs
 	private function callDets($urls) {
-		$dets = explode(',',$urls);
+		$dets = explode('|',$urls);
 		foreach ($dets as $det_url) {
 			$det_url = trim($det_url);
 			http_post($det_url, $_POST, 10);				
@@ -610,9 +610,9 @@ class AutoNotify {
 		RCView::div(array('id'=>'test_info','style'=>'display:none;'),
 			RCView::p(array(),'You can test your logical expression by selecting a record (and event) to evaluate the expression against.  This is useful if you have an existing record that would be a match for your condition.')
 		).RCView::div(array('id'=>'post_script_det_url_info','style'=>'display:none;'),
-			RCView::p(array(),'By inserting a comma-separated list of valid URLs into this field you can trigger additional DETs <b>AFTER</b> this one is complete.  This is useful for chaining DETs together.')
+			RCView::p(array(),'By inserting a pipe-delimited (e.g. | char) list of valid URLs into this field you can trigger additional DETs <b>AFTER</b> this one is complete.  This is useful for chaining DETs together.')
 		).RCView::div(array('id'=>'pre_script_det_url_info','style'=>'display:none;'),
-			RCView::p(array(),'By inserting a comma-separated list of valid URLs into this field you can trigger additional DETs to run <b>BEFORE</b> this notification trigger.  This might be useful for running an auto-scoring algorithm, for example.')
+			RCView::p(array(),'By inserting a pipe-delimited (e.g. | char) list of valid URLs into this field you can trigger additional DETs to run <b>BEFORE</b> this notification trigger.  This might be useful for running an auto-scoring algorithm, for example.')
 		);
 		
 		
