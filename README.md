@@ -6,9 +6,10 @@ In the index.php file, be sure to modify the log location to a suitable path for
 
 ## Installation ##
 Typically these files are placed in your root redcap folder as:
-/plugins/autonotify/index.php
-/plugins/autonotify/common.php
-/plugins/autonotify/det.php
+
+    /plugins/autonotify/index.php
+    /plugins/autonotify/common.php
+    /plugins/autonotify/det.php
 
 They should be 'outside' your redcap_vx.y.z folders (as siblings).
 
