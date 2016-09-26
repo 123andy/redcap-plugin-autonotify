@@ -13,7 +13,7 @@
  * The settings for each project are stored as an encoded variable (an) in the query string of the DET.
  *
  *
- * 
+ *
  * Andrew Martin, Stanford University, 2016
  *
 **/
@@ -22,7 +22,7 @@ error_reporting(E_ALL);
 
 
 // MANUAL LOG FILE
-$log_file = "/var/log/redcap/autonotify";
+// $log_file = "/Users/andy123/Documents/local REDCap server/redcap/temp/autonotify.log";
 
 // MANUAL OVERRIDE OF HTTPS - Add your url domain to this array if you want to only use http
 $http_only = array('stanford.edu');
@@ -30,20 +30,20 @@ $http_only = array('stanford.edu');
 // OPTIONAL SPECIAL LOG FILE FOR THIS PLUGIN (OTHERWISE WILL WRITE TO REDCAP TEMP)
 //$log_file = "/var/log/redcap/autonotify.log";
 
-// ////////////// DONT EDIT BELOW HERE //////////////
 
-$action = '';	// Script action
+////////////// DONT EDIT BELOW HERE //////////////
+
+$action = '';   // Script action
 ##### RUNNING AS DET - PART 1 #####
 if ( $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['redcap_url']) ) {
     $action = 'det';
-    define('NOAUTH',true);	// Turn off Authentication - running on server
-    $_GET['pid'] = $_POST['project_id'];	// Set the pid from POST so context is Project rather than Global
+    define('NOAUTH',true);  // Turn off Authentication - running on server
+    $_GET['pid'] = $_POST['project_id'];    // Set the pid from POST so context is Project rather than Global
 }
 
 // Include required files
 require_once "../../redcap_connect.php";
 require_once "common.php";
-require_once "det.php";
 
 // If a log file hasn't been set, then let's default to the REDCap temp folder
 if (!isset($log_file)) {
@@ -55,7 +55,7 @@ $an = new AutoNotify($project_id);
 //error_log("Here");
 
 logIt("Starting AutoNotify on project $project_id");
-logIt("DET URL: " . $an->getDetUrl(), "DEBUG");
+//logIt("DET URL: " . $an->getDetUrl(), "DEBUG");
 
 
 ##### RUNNING AS DET - PART 2 #####
