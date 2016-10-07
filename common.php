@@ -234,6 +234,9 @@ class AutoNotify {
         // Remove query string from DET url
         $url = preg_replace('/\?.*/', '', $url);
 
+        // Replace index.php with det.php
+        $url = preg_replace("/index.php/", "det.php", $url);
+
         return $url;
     }
 
