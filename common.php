@@ -84,7 +84,7 @@ class AutoNotify {
         $sql = "SELECT l.sql_log, l.ts
 			FROM redcap_log_event l WHERE
 		 		l.project_id = " . intval($this->project_id) . "
-			AND l.page = 'PLUGIN'
+			AND (l.page = 'PLUGIN' OR l.page LIKE '%autonotify/index.php%')
 			AND l.description = '" . AutoNotify::PluginName . " Config'
 			ORDER BY ts DESC LIMIT 1";
         $q = db_query($sql);
